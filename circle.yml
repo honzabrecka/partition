@@ -1,0 +1,9 @@
+dependencies:
+  post:
+    - lein deps
+
+test:
+  override:
+    - lein test partition.core
+  post:
+    - lein uberjar
