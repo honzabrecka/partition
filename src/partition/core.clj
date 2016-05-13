@@ -7,15 +7,6 @@
   (:gen-class)
   (:use clojure.test))
 
-(defmacro != [& params]
-  `(not (= ~@params)))
-
-(deftest not-equal-test
-  (is (= true
-         (!= true false true)))
-  (is (= false
-         (!= true true true))))
-
 (def artifact-url-default-pattern "nightwatch_[0-9]$")
 
 (def default-time 10000)
