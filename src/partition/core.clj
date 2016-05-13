@@ -175,7 +175,7 @@
              (fetch-artifacts "" "" "" "[a-z]"))))))
 
 (def cli-options
-  [["-a" "--access-token ACCESS_TOKEN" "Access Token"]
+  [["-t" "--access-token ACCESS_TOKEN" "Access Token"]
    ["-u" "--user USER" "User"]
    ["-p" "--project PROJECT" "Project"]
    ["-r" "--regexp REGEXP" "Artifact url pattern"
@@ -188,7 +188,7 @@
   (let [{:keys [options arguments errors summary]} (cli/parse-opts args cli-options)]
     (cond
       (not= (count options) (count cli-options)) (exit 5 summary)
-      (not= (count arguments) 2) (exit 1 summary)
+      (< (count arguments) 1) (exit 1 summary)
       errors (exit 4 errors))
     (let [{:keys [user project access-token count regexp]} options
           [in out] arguments]
@@ -196,5 +196,5 @@
            (parse-nightwatch-output)
            (safe-merge (test-files in))
            (partition-into count)
-           (keep-indexed (copy-files in out))
+           (keep-indexed (copy-files in (or out in)))
            (dorun)))))
