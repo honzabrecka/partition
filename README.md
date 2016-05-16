@@ -10,6 +10,7 @@ $ lein run
     -a, --access-token ACCESS_TOKEN                     Access Token
     -u, --user USER                                     User
     -p, --project PROJECT                               Project
+    -b, --branch BRANCH                                 Branch
     -r, --regexp REGEXP              nightwatch_[0-9]$  Artifact url pattern
     -c, --count COUNT                                   Count of workers
 ```
