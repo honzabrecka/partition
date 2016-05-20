@@ -13,7 +13,7 @@
 
 (def default-time 10000)
 
-(def artifacts-url "https://circleci.com/api/v1/project/%user%/%project%/latest/artifacts?branch=%branch%&filter=successful&circle-token=%access-token%")
+(def artifacts-url-template "https://circleci.com/api/v1/project/%user%/%project%/latest/artifacts?branch=%branch%&filter=successful&circle-token=%access-token%")
 
 (defn exit
   [status msg]
@@ -107,13 +107,26 @@
   (is (= false
          (ok-response? nil 500))))
 
+(defn artifacts-url [options]
+  (reduce (fn [url [key value]]
+            (string/replace url (str "%" (name key) "%") (str value)))
+          artifacts-url-template
+          options))
+
+(deftest artifacts-url-test
+  (is (= artifacts-url-template
+         (artifacts-url {})))
+  (is (= "https://circleci.com/api/v1/project/abc/xyz/latest/artifacts?branch=master&filter=successful&circle-token=token"
+         (artifacts-url {:user "abc"
+                         :project "xyz"
+                         :branch "master"
+                         :access-token "token"})))
+  (is (= artifacts-url-template
+         (artifacts-url {:count 2}))))
+
 (defn fetch-artifacts
   [{:keys [access-token regexp] :as options}]
-  (let [url (reduce (fn [url [key value]]
-                      (string/replace url (str "%" (name key) "%") value))
-                    artifacts-url
-                    options)
-        {:keys [status body error]} @(http/get url {:as :text})]
+  (let [{:keys [status body error]} @(http/get (artifacts-url options) {:as :text})]
     (if (ok-response? error status)
       (let [futures (->> (clojure.edn/read-string body)
                          (map :url)
