@@ -7,7 +7,7 @@
   (:gen-class)
   (:use clojure.test))
 
-(def artifact-url-default-pattern "nightwatch_[0-9]$")
+(def artifact-url-default-pattern "^.+?nightwatch_output$")
 
 (def default-branch "master")
 
