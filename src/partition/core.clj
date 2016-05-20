@@ -202,6 +202,6 @@
       (->> (fetch-artifacts options)
            (parse-nightwatch-output)
            (safe-merge (test-files in))
-           (partition-into count)
+           (partition-into (:count options))
            (keep-indexed (copy-files in (or out in)))
            (dorun)))))
