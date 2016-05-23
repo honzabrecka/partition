@@ -7,12 +7,12 @@ A tool solving partition problem you'll have when trying to run your tests in pa
 ```console
 $ lein run
 
-    -a, --access-token ACCESS_TOKEN                     Access Token
-    -u, --user USER                                     User
-    -p, --project PROJECT                               Project
-    -b, --branch BRANCH                                 Branch
-    -r, --regexp REGEXP              nightwatch_[0-9]$  Artifact url pattern
-    -c, --count COUNT                                   Count of workers
+  -t, --access-token ACCESS_TOKEN                          Access Token
+  -u, --user USER                                          User
+  -p, --project PROJECT                                    Project
+  -b, --branch BRANCH              master                  Branch
+  -r, --regexp REGEXP              ^.+?nightwatch_output$  Artifact url pattern
+  -c, --count COUNT                                        Count of workers
 ```
 
 ## Test
