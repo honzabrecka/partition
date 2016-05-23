@@ -15,6 +15,25 @@
 
 (def artifacts-url-template "https://circleci.com/api/v1/project/%user%/%project%/latest/artifacts?branch=%branch%&filter=successful&circle-token=%access-token%")
 
+(defn tap
+  [f v]
+  (f v)
+  v)
+
+(deftest tap-test
+  (is (= 1 @(tap #(vswap! % inc) (volatile! 0)))))
+
+(defn log
+  [minimal-verbosity-level actual-verbosity-level]
+  (fn [message]
+    (when (>= actual-verbosity-level minimal-verbosity-level)
+      (println message))))
+
+(deftest log-test
+  (with-redefs [println identity]
+    (is (nil? ((log 10 0) "whatever")))
+    (is (= "whatever" ((log 0 10) "whatever")))))
+
 (defn exit
   [status msg]
   (println msg)
@@ -125,7 +144,7 @@
          (artifacts-url {:count 2}))))
 
 (defn fetch-artifacts
-  [{:keys [access-token regexp] :as options}]
+  [log {:keys [access-token regexp] :as options}]
   (let [{:keys [status body error]} @(http/get (artifacts-url options) {:as :text})]
     (if (ok-response? error status)
       (let [futures (->> (clojure.edn/read-string body)
@@ -139,38 +158,39 @@
                        (ok-response? error status)))
              (map :body)
              (reduce str "")))
-      "")))
+      (do (log (str "Fetch artifacts error: (" status ") " error))
+          ""))))
 
 (deftest fetch-artifacts-test
   (testing "an error"
     (with-redefs [http/get (fn [_ _] (future (Thread/sleep 10)
                                              {:error "An error"}))]
       (is (= ""
-             (fetch-artifacts {:regexp "[a-z]"})))))
+             (fetch-artifacts (fn [_]) {:regexp "[a-z]"})))))
   (testing "bad status"
     (with-redefs [http/get (fn [_ _] (future (Thread/sleep 10)
                                              {:status 500}))]
       (is (= ""
-             (fetch-artifacts {:regexp "[a-z]"})))))
+             (fetch-artifacts (fn [_]) {:regexp "[a-z]"})))))
   (testing "ok, but no suitable arifact url"
     (with-redefs [http/get (fn [_ _] (future (Thread/sleep 10)
                                              {:status 200 :body "[{:url \"whatever\"}]"}))]
       (is (= ""
-             (fetch-artifacts {:regexp "[a-z]"})))))
+             (fetch-artifacts (fn [_]) {:regexp "[a-z]"})))))
   (testing "ok, but arifact error"
     (with-redefs [http/get (fn [url _] (future (Thread/sleep 10)
                                                (condp = url
                                                  "a?circle-token=" {:error "An error"}
                                                  {:status 200 :body "({:url \"a\"})"})))]
       (is (= ""
-             (fetch-artifacts {:regexp "[a-z]"})))))
+             (fetch-artifacts (fn [_]) {:regexp "[a-z]"})))))
   (testing "ok, but arifact invalid status"
     (with-redefs [http/get (fn [url _] (future (Thread/sleep 10)
                                                (condp = url
                                                  "a?circle-token=" {:status 500}
                                                  {:status 200 :body "({:url \"a\"})"})))]
       (is (= ""
-             (fetch-artifacts {:regexp "[a-z]"})))))
+             (fetch-artifacts (fn [_]) {:regexp "[a-z]"})))))
   (testing "ok"
     (with-redefs [http/get (fn [url _] (future (Thread/sleep 10)
                                                (condp = url
@@ -178,7 +198,7 @@
                                                  "b?circle-token=" {:status 200 :body "bar"}
                                                  {:status 200 :body "({:url \"a\"} {:url \"b\"})"})))]
       (is (= "foobar"
-             (fetch-artifacts {:regexp "[a-z]"}))))))
+             (fetch-artifacts (fn [_]) {:regexp "[a-z]"}))))))
 
 (def cli-options
   [["-t" "--access-token ACCESS_TOKEN" "Access Token"]
@@ -189,7 +209,11 @@
    ["-r" "--regexp REGEXP" "Artifact url pattern"
     :default artifact-url-default-pattern]
    ["-c" "--count COUNT" "Count of workers"
-    :parse-fn #(Integer/parseInt %)]])
+    :parse-fn #(Integer/parseInt %)]
+   ["-v" nil "Verbosity level"
+    :id :verbosity
+    :default 0
+    :assoc-fn (fn [m k _] (update-in m [k] inc))]])
 
 (defn -main
   [& args]
@@ -199,9 +223,10 @@
       (< (count arguments) 1) (exit 1 summary)
       errors (exit 4 errors))
     (let [[in out] arguments]
-      (->> (fetch-artifacts options)
+      (->> (fetch-artifacts (log 0 (:verbosity options)) options)
            (parse-nightwatch-output)
            (safe-merge (test-files in))
            (partition-into (:count options))
+           (tap (log 1 (:verbosity options)))
            (keep-indexed (copy-files in (or out in)))
            (dorun)))))
