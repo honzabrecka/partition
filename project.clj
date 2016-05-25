@@ -1,5 +1,5 @@
 (defproject partition "0.1.0-SNAPSHOT"
-  :description "FIXME: write description"
+  :description "A tool solving partition problem"
   :url "http://example.com/FIXME"
   :license {:name "MIT License"
             :url "http://www.opensource.org/licenses/mit-license.php"}
