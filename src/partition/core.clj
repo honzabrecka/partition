@@ -49,16 +49,15 @@
             (drop n coll))))
 
 (deftest partition-into-test
-  (is (= [[[:file 5]
-           [:file 4]
-           [:file 2]]
-          [[:file 8]
-           [:file 2]]]
-         (partition-into 2 [[:file 4]
-                            [:file 5]
-                            [:file 2]
-                            [:file 8]
-                            [:file 2]]))))
+  (letfn [(wrap [v] [:file v])
+          (wrap-r [v] (map wrap v))]
+    (are [expected input count]
+      (= (map wrap-r expected) (partition-into count (map wrap input)))
+      [[1]] [1] 1
+      [[7 1]] [7 1] 1
+      [[7] [1]] [7 1] 2
+      [[5 4 2] [8 2]] [4 5 2 8 2] 2
+      [[2 2 1] [3 1 1] [5]] [5 2 3 2 1 1 1] 3)))
 
 (defn parse-nightwatch-output
   [content]
