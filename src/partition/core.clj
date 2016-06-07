@@ -40,24 +40,32 @@
   (System/exit status))
 
 (defn partition-into
-  [n col]
-  (let [coll (reverse (sort-by second col))]
+  [select-fn n col]
+  (let [coll (reverse (sort-by select-fn col))]
     (reduce (fn [cubes val]
-              (let [ordered-cubes (sort-by #(apply + (second val) (map second %1)) cubes)]
+              (let [ordered-cubes (sort-by #(apply + (select-fn val) (map select-fn %1)) cubes)]
                 (cons (conj (first ordered-cubes) val) (rest ordered-cubes))))
             (map vector (take n coll))
             (drop n coll))))
 
 (deftest partition-into-test
-  (letfn [(wrap [v] [:file v])
-          (wrap-r [v] (map wrap v))]
+  (testing "partitioning"
     (are [expected input count]
-      (= (map wrap-r expected) (partition-into count (map wrap input)))
+      (= expected (partition-into identity count input))
       [[1]] [1] 1
       [[7 1]] [7 1] 1
       [[7] [1]] [7 1] 2
       [[5 4 2] [8 2]] [4 5 2 8 2] 2
-      [[2 2 1] [3 1 1] [5]] [5 2 3 2 1 1 1] 3)))
+      [[2 2 1] [3 1 1] [5]] [5 2 3 2 1 1 1] 3))
+  (testing "complex data structure, not just int"
+    (is (= [[[:file 3]
+             [:file 1]]
+            [[:file 2]
+             [:file 2]]]
+           (partition-into second 2 [[:file 1]
+                                     [:file 2]
+                                     [:file 2]
+                                     [:file 3]])))))
 
 (defn parse-nightwatch-output
   [content]
