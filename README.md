@@ -1,6 +1,6 @@
 # partition
 
-A tool solving partition problem you'll have when trying to run your tests in parallel.
+A tool solving partition problem.
 
 ## Usage
 
