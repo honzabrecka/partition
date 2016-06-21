@@ -233,7 +233,7 @@
       (->> (fetch-artifacts (log 0 (:verbosity options)) options)
            (parse-nightwatch-output)
            (safe-merge (test-files in))
-           (partition-into (:count options))
+           (partition-into second (:count options))
            (tap (log 1 (:verbosity options)))
            (keep-indexed (copy-files in (or out in)))
            (dorun)))))
