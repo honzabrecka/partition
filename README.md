@@ -17,7 +17,7 @@ $ lein run
 
 ## Test
 
-[![CircleCI](https://circleci.com/gh/honzabrecka/partition.svg?style=svg&circle-token=631ae11afa9d54f815793e072d27470912b4a61c)](https://circleci.com/gh/honzabrecka/partition)
+[![CircleCI](https://circleci.com/gh/blueberryapps/partition.svg?style=svg)](https://circleci.com/gh/blueberryapps/partition)
 
 ```console
 $ lein test partition.core
