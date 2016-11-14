@@ -213,7 +213,8 @@
 
 (defn cli-options
   []
-  [["-t" "--access-token ACCESS_TOKEN" "Access Token"]
+  [["-h" "--help" "Help"]
+   ["-t" "--access-token ACCESS_TOKEN" "Access Token"]
    ["-u" "--user USER" "User"
     :default (getenv "CIRCLE_PROJECT_USERNAME")]
    ["-p" "--project PROJECT" "Project"
@@ -232,14 +233,21 @@
 
 (defn -main
   [& args]
-  (let [cli-options (cli-options)
-        {:keys [options arguments errors summary]} (cli/parse-opts args cli-options)]
+  (let [{:keys [options arguments errors summary]} (cli/parse-opts args (cli-options))]
     (cond
-      (not= (count options) (count cli-options)) (exit 5 summary)
-      (< (count arguments) 1) (exit 1 summary)
-      errors (exit 4 errors))
+      (:help options)
+        (exit 1 summary)
+      (and (> (:node-total options) 1)
+           (not (:access-token options)))
+        (exit 1 "Access token (--access-token option) is required when count of nodes (workers) > 1")
+      (= (count arguments) 0)
+        (exit 1 "Path to tests is missing")
+      errors
+        (exit 1 errors))
     (let [[in out] arguments]
-      (->> (fetch-artifacts (log 0 (:verbosity options)) options)
+      (->> (if (> (:node-total options) 1)
+             (fetch-artifacts (log 0 (:verbosity options)) options)
+             "")
            (parse-nightwatch-output)
            (safe-merge (test-files in))
            (partition-into second (:node-total options))
