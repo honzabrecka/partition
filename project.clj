@@ -1,4 +1,4 @@
-(defproject partition "0.1.0-SNAPSHOT"
+(defproject partition "0.2.0-SNAPSHOT"
   :description "A tool solving partition problem"
   :url "http://example.com/FIXME"
   :license {:name "MIT License"

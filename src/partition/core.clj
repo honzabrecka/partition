@@ -148,7 +148,7 @@
                          :branch "master"
                          :access-token "token"})))
   (is (= artifacts-url-template
-         (artifacts-url {:count 2}))))
+         (artifacts-url {:whatever 2}))))
 
 (defn fetch-artifacts
   [log {:keys [access-token regexp] :as options}]
@@ -207,15 +207,23 @@
       (is (= "foobar"
              (fetch-artifacts (fn [_]) {:regexp "[a-z]"}))))))
 
-(def cli-options
+(defn getenv
+  [id]
+  (System/getenv id))
+
+(defn cli-options
+  []
   [["-t" "--access-token ACCESS_TOKEN" "Access Token"]
-   ["-u" "--user USER" "User"]
-   ["-p" "--project PROJECT" "Project"]
+   ["-u" "--user USER" "User"
+    :default (getenv "CIRCLE_PROJECT_USERNAME")]
+   ["-p" "--project PROJECT" "Project"
+    :default (getenv "CIRCLE_PROJECT_REPONAME")]
    ["-b" "--branch BRANCH" "Branch"
     :default default-branch]
    ["-r" "--regexp REGEXP" "Artifact url pattern"
     :default artifact-url-default-pattern]
-   ["-c" "--count COUNT" "Count of workers"
+   ["-c" "--node-total NODE_TOTAL" "Count of nodes (workers)"
+    :default (Integer/parseInt (or (getenv "CIRCLE_NODE_TOTAL") "1"))
     :parse-fn #(Integer/parseInt %)]
    ["-v" nil "Verbosity level"
     :id :verbosity
@@ -224,7 +232,8 @@
 
 (defn -main
   [& args]
-  (let [{:keys [options arguments errors summary]} (cli/parse-opts args cli-options)]
+  (let [cli-options (cli-options)
+        {:keys [options arguments errors summary]} (cli/parse-opts args cli-options)]
     (cond
       (not= (count options) (count cli-options)) (exit 5 summary)
       (< (count arguments) 1) (exit 1 summary)
@@ -233,7 +242,7 @@
       (->> (fetch-artifacts (log 0 (:verbosity options)) options)
            (parse-nightwatch-output)
            (safe-merge (test-files in))
-           (partition-into second (:count options))
+           (partition-into second (:node-total options))
            (tap (log 1 (:verbosity options)))
            (keep-indexed (copy-files in (or out in)))
            (dorun)))))
