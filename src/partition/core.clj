@@ -121,6 +121,14 @@
         (io/copy (io/file source)
                  (io/file target))))))
 
+(defn delete-files
+  [in]
+  (fn [_ cube]
+    (doseq [row cube]
+      (let [[file _] row
+            source (str in "/" file)]
+        (io/delete-file source :silently true)))))
+
 (defn ok-response?
   [error status]
   (and (nil? error) (= status 200)))
@@ -226,6 +234,9 @@
    ["-c" "--node-total NODE_TOTAL" "Count of nodes (workers)"
     :default (Integer/parseInt (or (getenv "CIRCLE_NODE_TOTAL") "1"))
     :parse-fn #(Integer/parseInt %)]
+   ["-m" "--mode MODE" "Mode"
+    :default "copy"
+    :validate [#(contains? #{"copy" "delete"} %) "Must be one of copy or delete."]]
    ["-v" nil "Verbosity level"
     :id :verbosity
     :default 0
@@ -252,5 +263,7 @@
            (safe-merge (test-files in))
            (partition-into second (:node-total options))
            (tap (log 1 (:verbosity options)))
-           (keep-indexed (copy-files in (or out in)))
+           (keep-indexed (if (= (:mode options) "copy")
+                           (copy-files in (or out in))
+                           (delete-files in)))
            (dorun)))))
