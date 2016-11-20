@@ -122,12 +122,13 @@
                  (io/file target))))))
 
 (defn delete-files
-  [in]
+  [all-files in]
   (fn [_ cube]
-    (doseq [row cube]
-      (let [[file _] row
-            source (str in "/" file)]
-        (io/delete-file source :silently true)))))
+    (let [files-in-cube (into #{} (map first) cube)
+          all-files (into [] (map first) all-files)
+          files-to-delete (filter #(not (contains? files-in-cube %)) all-files)]
+      (doseq [file files-to-delete]
+        (io/delete-file (str in "/" file) :silently true)))))
 
 (defn ok-response?
   [error status]
@@ -255,15 +256,16 @@
         (exit 1 "Path to tests is missing")
       errors
         (exit 1 errors))
-    (let [[in out] arguments]
+    (let [[in out] arguments
+          test-files# (test-files in)]
       (->> (if (> (:node-total options) 1)
              (fetch-artifacts (log 0 (:verbosity options)) options)
              "")
            (parse-nightwatch-output)
-           (safe-merge (test-files in))
+           (safe-merge test-files#)
            (partition-into second (:node-total options))
            (tap (log 1 (:verbosity options)))
            (keep-indexed (if (= (:mode options) "copy")
                            (copy-files in (or out in))
-                           (delete-files in)))
+                           (delete-files test-files# in)))
            (dorun)))))
