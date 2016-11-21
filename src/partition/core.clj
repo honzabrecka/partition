@@ -130,6 +130,12 @@
       (doseq [file files-to-delete]
         (io/delete-file (str in "/" file) :silently true)))))
 
+(deftest delete-files-test
+  (let [calls (volatile! [])]
+    (with-redefs [io/delete-file (fn [a _ _] (vswap! calls conj a))]
+      ((delete-files {"a" 10 "b" 10 "c" 10} "foo") nil [["b" 10]])
+      (is (= ["foo/a" "foo/c"] @calls)))))
+
 (defn ok-response?
   [error status]
   (and (nil? error) (= status 200)))
