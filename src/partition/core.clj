@@ -122,19 +122,30 @@
                  (io/file target))))))
 
 (defn delete-files
-  [all-files in]
-  (fn [_ cube]
-    (let [files-in-cube (into #{} (map first) cube)
-          all-files (into [] (map first) all-files)
-          files-to-delete (filter #(not (contains? files-in-cube %)) all-files)]
-      (doseq [file files-to-delete]
-        (io/delete-file (str in "/" file) :silently true)))))
+  [node-index all-files in]
+  (fn [index cube]
+    (when (= index node-index)
+      (let [files-in-cube (into #{} (map first) cube)
+            all-files (into [] (map first) all-files)
+            files-to-delete (filter #(not (contains? files-in-cube %)) all-files)]
+        (doseq [file files-to-delete]
+          (io/delete-file (str in "/" file) :silently true))))))
 
 (deftest delete-files-test
-  (let [calls (volatile! [])]
+  (let [calls (volatile! [])
+        index 0
+        all-files {"a" 10 "b" 10 "c" 10}
+        cube [["b" 10]]
+        in "foo"]
     (with-redefs [io/delete-file (fn [a _ _] (vswap! calls conj a))]
-      ((delete-files {"a" 10 "b" 10 "c" 10} "foo") nil [["b" 10]])
-      (is (= ["foo/a" "foo/c"] @calls)))))
+      (testing "index does not match node-index -> do nothing"
+        (vreset! calls [])
+        ((delete-files index all-files in) 55 cube)
+        (is (= [] @calls)))
+      (testing "index does match node-index -> delete files not included in cube"
+        (vreset! calls [])
+        ((delete-files index all-files in) 0 cube)
+        (is (= ["foo/a" "foo/c"] @calls))))))
 
 (defn ok-response?
   [error status]
@@ -241,6 +252,9 @@
    ["-c" "--node-total NODE_TOTAL" "Count of nodes (workers)"
     :default (Integer/parseInt (or (getenv "CIRCLE_NODE_TOTAL") "1"))
     :parse-fn #(Integer/parseInt %)]
+   ["-i" "--node-index NODE_INDEX" "Index of current node (worker)"
+    :default (Integer/parseInt (or (getenv "CIRCLE_NODE_INDEX") "0"))
+    :parse-fn #(Integer/parseInt %)]
    ["-m" "--mode MODE" "Mode"
     :default "copy"
     :validate [#(contains? #{"copy" "delete"} %) "Must be one of copy or delete."]]
@@ -273,5 +287,5 @@
            (tap (log 1 (:verbosity options)))
            (keep-indexed (if (= (:mode options) "copy")
                            (copy-files in (or out in))
-                           (delete-files test-files# in)))
+                           (delete-files (:node-index options) test-files# in)))
            (dorun)))))
