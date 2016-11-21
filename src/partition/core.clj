@@ -121,6 +121,17 @@
         (io/copy (io/file source)
                  (io/file target))))))
 
+(deftest copy-files-test
+  (let [calls (volatile! [])]
+    (with-redefs [io/file identity
+                  io/copy (fn [a b] (vswap! calls conj [a b]))
+                  io/make-parents (fn [_])]
+      ((copy-files "foo" "bar") 1 [["a" 10]
+                                   ["b" 10]])
+      (is (= [["foo/a" "bar1/a"]
+              ["foo/b" "bar1/b"]]
+             @calls)))))
+
 (defn delete-files
   [node-index all-files in]
   (fn [index cube]
