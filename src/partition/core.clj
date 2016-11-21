@@ -253,7 +253,7 @@
     :default (Integer/parseInt (or (getenv "CIRCLE_NODE_INDEX") "0"))
     :parse-fn #(Integer/parseInt %)]
    ["-m" "--mode MODE" "Mode"
-    :default "copy"
+    :default "delete"
     :validate [#(contains? #{"copy" "delete"} %) "Must be one of copy or delete."]]
    ["-v" nil "Verbosity level"
     :id :verbosity
