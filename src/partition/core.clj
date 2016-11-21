@@ -152,12 +152,9 @@
   (and (nil? error) (= status 200)))
 
 (deftest ok-response?-test
-  (is (= true
-         (ok-response? nil 200)))
-  (is (= false
-         (ok-response? "err" 200)))
-  (is (= false
-         (ok-response? nil 500))))
+  (is (true? (ok-response? nil 200)))
+  (is (false? (ok-response? "err" 200)))
+  (is (false? (ok-response? nil 500))))
 
 (defn artifacts-url [options]
   (reduce (fn [url [key value]]
