@@ -67,7 +67,7 @@
                                      [:file 2]
                                      [:file 3]])))))
 
-(defn parse-nightwatch-output
+(defn parse-mocha-output
   [content]
   (->> content
        (re-seq #"(?s)\((.+?\.js)\).+?\(([\d]+)ms\)")
@@ -75,17 +75,17 @@
                  (assoc acc (last (clojure.string/split file #"/")) (Integer/parseInt time)))
                {})))
 
-(deftest parse-nightwatch-output-test
+(deftest parse-mocha-output-test
   (testing "empty input"
     (is (= {}
-           (parse-nightwatch-output ""))))
+           (parse-mocha-output ""))))
   (testing "invalid input"
     (is (= {}
-           (parse-nightwatch-output "abc"))))
+           (parse-mocha-output "abc"))))
   (testing "valid input"
     (is (= {"registrationValidation5.js" 9043
             "registrationValidation7.js" 6926}
-           (parse-nightwatch-output "\n  User (/web/test/features1/registrationValidation5.js)\n    Should get error message\n\n      ✓ while register with no password (9043ms)\n\n  User (/web/test/features1/registrationValidation7.js)\n    Should get error message\n\n      ✓ while register with no values (6926ms)\n\n\n  25 passing (7m)\n\n")))))
+           (parse-mocha-output "\n  User (/web/test/features1/registrationValidation5.js)\n    Should get error message\n\n      ✓ while register with no password (9043ms)\n\n  User (/web/test/features1/registrationValidation7.js)\n    Should get error message\n\n      ✓ while register with no values (6926ms)\n\n\n  25 passing (7m)\n\n")))))
 
 (defn test-files
   [dir]
@@ -278,7 +278,7 @@
       (->> (if (> (:node-total options) 1)
              (fetch-artifacts (log 0 (:verbosity options)) options)
              "")
-           (parse-nightwatch-output)
+           (parse-mocha-output)
            (safe-merge test-files#)
            (partition-into second (:node-total options))
            (tap (log 1 (:verbosity options)))
