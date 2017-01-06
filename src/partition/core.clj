@@ -3,11 +3,20 @@
             [clojure.string :as string]
             [clojure.edn :as edn]
             [org.httpkit.client :as http]
-            [clojure.tools.cli :as cli])
+            [clojure.tools.cli :as cli]
+            [clojure.xml :as xml]
+            [clojure.zip :as zip])
   (:gen-class)
   (:use clojure.test))
 
-(def artifact-url-default-pattern "^.+?nightwatch_output$")
+(defmacro flip
+  [f a b]
+  `(~f ~b ~a))
+
+(defn nil-safe
+  [f]
+  (fn [a & args]
+    (apply f (cons (or a "") args))))
 
 (def default-branch "master")
 
@@ -67,35 +76,47 @@
                                      [:file 2]
                                      [:file 3]])))))
 
-(defn parse-mocha-output
-  [content]
-  (->> content
-       (re-seq #"(?s)\((.+?\.js)\).+?\(([\d]+)ms\)")
-       (reduce (fn [acc [_ file time]]
-                 (assoc acc (last (clojure.string/split file #"/")) (Integer/parseInt time)))
-               {})))
+(defn zip-str
+  [s]
+  (->> s
+       .getBytes
+       java.io.ByteArrayInputStream.
+       xml/parse
+       zip/xml-zip))
 
-(deftest parse-mocha-output-test
-  (testing "empty input"
-    (is (= {}
-           (parse-mocha-output ""))))
-  (testing "invalid input"
-    (is (= {}
-           (parse-mocha-output "abc"))))
-  (testing "valid input"
-    (is (= {"registrationValidation5.js" 9043
-            "registrationValidation7.js" 6926}
-           (parse-mocha-output "\n  User (/web/test/features1/registrationValidation5.js)\n    Should get error message\n\n      ✓ while register with no password (9043ms)\n\n  User (/web/test/features1/registrationValidation7.js)\n    Should get error message\n\n      ✓ while register with no values (6926ms)\n\n\n  25 passing (7m)\n\n")))))
+(def parsers
+  {"xunit" {:url-pattern "^.+?[xj]unit\\/.+?\\.xml$"
+            :parser      (fn [s]
+                           (into {}
+                                 (comp (filter #(and (= (:tag %) :testsuite)
+                                                     (not= (:content %) nil)))
+                                       (map #(vector (->> (get-in % [:attrs :name])
+                                                          (re-matches #"^.+?\((.+?)\)$")
+                                                          (second)
+                                                          (flip (nil-safe string/split) #"/")
+                                                          (last))
+                                                     (->> (get-in % [:attrs :time])
+                                                          (Float/parseFloat)
+                                                          (* 1000)))))
+                                 (-> s
+                                     zip-str
+                                     zip/children)))}})
+
+(deftest parsers-xunit-test
+  (is (= {"faq.js" 5000.0}
+         ((get-in parsers ["xunit" :parser])
+           "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites name=\"Mocha Tests\" time=\"5.7\" tests=\"1\" failures=\"0\">\n  <testsuite name=\"Root Suite\" timestamp=\"2017-01-06T19:26:23\" tests=\"0\" failures=\"0\" time=\"0\">\n  </testsuite>\n  <testsuite name=\"FAQ (/cypress/integration/faq.js)\" timestamp=\"2017-01-06T19:26:23\" tests=\"1\" failures=\"0\" time=\"5\">\n    <testcase name=\"FAQ (/cypress/integration/faq.js) cy.should - assert that &lt;title&gt; is Vivus FAQ\" time=\"5.7\" classname=\"cy.should - assert that &lt;title&gt; is Vivus FAQ\">\n    </testcase>\n  </testsuite>\n</testsuites>")))
+  (is (= {"" 5000.0}
+         ((get-in parsers ["xunit" :parser])
+           "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites name=\"Mocha Tests\" time=\"5.7\" tests=\"1\" failures=\"0\">\n  <testsuite name=\"Root Suite\" timestamp=\"2017-01-06T19:26:23\" tests=\"0\" failures=\"0\" time=\"0\">\n  </testsuite>\n  <testsuite name=\"FAQ\" timestamp=\"2017-01-06T19:26:23\" tests=\"1\" failures=\"0\" time=\"5\">\n    <testcase name=\"FAQ cy.should - assert that &lt;title&gt; is Vivus FAQ\" time=\"5.7\" classname=\"cy.should - assert that &lt;title&gt; is Vivus FAQ\">\n    </testcase>\n  </testsuite>\n</testsuites>"))))
 
 (defn test-files
   [dir]
-  (->> dir
-       (io/file)
-       (file-seq)
-       (filter #(.isFile %))
-       (reduce (fn [acc file]
-                 (assoc acc (.getName file) default-time))
-               {})))
+  (into {}
+        (comp (filter #(.isFile %))
+              (map #(.getName %))
+              (map #(vector % default-time)))
+        (file-seq (io/file dir))))
 
 (defn safe-merge
   [a b]
@@ -167,7 +188,8 @@
   (is (false? (ok-response? "err" 200)))
   (is (false? (ok-response? nil 500))))
 
-(defn artifacts-url [options]
+(defn artifacts-url
+  [options]
   (reduce (fn [url [key value]]
             (string/replace url (str "%" (name key) "%") (str value)))
           artifacts-url-template
@@ -177,73 +199,101 @@
   (is (= artifacts-url-template
          (artifacts-url {})))
   (is (= "https://circleci.com/api/v1/project/abc/xyz/latest/artifacts?branch=master&filter=successful&circle-token=token"
-         (artifacts-url {:user "abc"
-                         :project "xyz"
-                         :branch "master"
+         (artifacts-url {:user         "abc"
+                         :project      "xyz"
+                         :branch       "master"
                          :access-token "token"})))
   (is (= artifacts-url-template
          (artifacts-url {:whatever 2}))))
 
 (defn fetch-artifacts
-  [log {:keys [access-token regexp] :as options}]
+  [log {:keys [access-token] :as options}]
   (let [{:keys [status body error]} @(http/get (artifacts-url options) {:as :text})]
     (if (ok-response? error status)
       (let [futures (->> (clojure.edn/read-string body)
-                         (map :url)
-                         (filter #(re-matches (re-pattern regexp) %))
-                         (map #(http/get (str % "?circle-token=" access-token) {:as :text}))
+                         (map (fn [{:keys [url]}]
+                                (when-let [{:keys [parser]} (->> parsers
+                                                                 vals
+                                                                 (some #(when (re-matches (re-pattern (:url-pattern %)) url)
+                                                                          %)))]
+                                  [parser
+                                   (http/get (str url "?circle-token=" access-token) {:as :text})])))
                          (doall))]
         (->> futures
-             (map deref)
-             (filter (fn [{:keys [status error]}]
-                       (ok-response? error status)))
-             (map :body)
-             (reduce str "")))
+             (map (fn [[parser future]]
+                    (when future
+                      (let [{:keys [status error body]} (deref future)]
+                        (when (ok-response? error status)
+                          (parser body))))))
+             (reduce merge {})))
       (do (log (str "Fetch artifacts error: (" status ") " error))
-          ""))))
+          {}))))
 
 (deftest fetch-artifacts-test
   (testing "an error"
     (with-redefs [http/get (fn [_ _] (future (Thread/sleep 10)
                                              {:error "An error"}))]
-      (is (= ""
-             (fetch-artifacts (fn [_]) {:regexp "[a-z]"})))))
+      (is (= {}
+             (fetch-artifacts (fn [_]) {})))))
   (testing "bad status"
     (with-redefs [http/get (fn [_ _] (future (Thread/sleep 10)
                                              {:status 500}))]
-      (is (= ""
-             (fetch-artifacts (fn [_]) {:regexp "[a-z]"})))))
-  (testing "ok, but no suitable arifact url"
+      (is (= {}
+             (fetch-artifacts (fn [_]) {})))))
+  (testing "ok, but no suitable artifact url"
     (with-redefs [http/get (fn [_ _] (future (Thread/sleep 10)
-                                             {:status 200 :body "[{:url \"whatever\"}]"}))]
-      (is (= ""
-             (fetch-artifacts (fn [_]) {:regexp "[a-z]"})))))
-  (testing "ok, but arifact error"
-    (with-redefs [http/get (fn [url _] (future (Thread/sleep 10)
+                                             {:status 200
+                                              :body   "[{:url \"whatever\"}]"}))]
+      (is (= {}
+             (fetch-artifacts (fn [_]) {})))))
+  (testing "ok, but artifact error"
+    (with-redefs [parsers {"test" {:url-pattern "[a-z]"
+                                   :parser      identity}}
+                  http/get (fn [url _] (future (Thread/sleep 10)
                                                (condp = url
                                                  "a?circle-token=" {:error "An error"}
-                                                 {:status 200 :body "({:url \"a\"})"})))]
-      (is (= ""
-             (fetch-artifacts (fn [_]) {:regexp "[a-z]"})))))
-  (testing "ok, but arifact invalid status"
-    (with-redefs [http/get (fn [url _] (future (Thread/sleep 10)
+                                                 {:status 200
+                                                  :body   "({:url \"a\"})"})))]
+      (is (= {}
+             (fetch-artifacts (fn [_]) {})))))
+  (testing "ok, but artifact invalid status"
+    (with-redefs [parsers {"test" {:url-pattern "[a-z]"
+                                   :parser      identity}}
+                  http/get (fn [url _] (future (Thread/sleep 10)
                                                (condp = url
                                                  "a?circle-token=" {:status 500}
-                                                 {:status 200 :body "({:url \"a\"})"})))]
-      (is (= ""
-             (fetch-artifacts (fn [_]) {:regexp "[a-z]"})))))
+                                                 {:status 200
+                                                  :body   "({:url \"a\"})"})))]
+      (is (= {}
+             (fetch-artifacts (fn [_]) {})))))
   (testing "ok"
-    (with-redefs [http/get (fn [url _] (future (Thread/sleep 10)
+    (with-redefs [parsers {"test" {:url-pattern "[a-z]"
+                                   :parser      (fn [s] {s 10})}}
+                  http/get (fn [url _] (future (Thread/sleep 10)
                                                (condp = url
-                                                 "a?circle-token=" {:status 200 :body "foo"}
-                                                 "b?circle-token=" {:status 200 :body "bar"}
-                                                 {:status 200 :body "({:url \"a\"} {:url \"b\"})"})))]
-      (is (= "foobar"
+                                                 "a?circle-token=" {:status 200
+                                                                    :body   "foo"}
+                                                 "b?circle-token=" {:status 200
+                                                                    :body   "bar"}
+                                                 {:status 200
+                                                  :body   "({:url \"a\"} {:url \"b\"})"})))]
+      (is (= {"bar" 10
+              "foo" 10}
              (fetch-artifacts (fn [_]) {:regexp "[a-z]"}))))))
 
 (defn getenv
   [id]
   (System/getenv id))
+
+(defn format-invalid-option-arg-message
+  [valid]
+  (str "Must be one of #{"
+       (reduce #(str %1 " " %2) valid)
+       "}."))
+
+(deftest format-invalid-option-arg-message-test
+  (is (= "Must be one of #{ab cd}."
+         (format-invalid-option-arg-message #{"ab" "cd"}))))
 
 (defn cli-options
   []
@@ -255,8 +305,6 @@
     :default (getenv "CIRCLE_PROJECT_REPONAME")]
    ["-b" "--branch BRANCH" "Branch"
     :default default-branch]
-   ["-r" "--regexp REGEXP" "Artifact url pattern"
-    :default artifact-url-default-pattern]
    ["-c" "--node-total NODE_TOTAL" "Count of nodes (workers)"
     :default (Integer/parseInt (or (getenv "CIRCLE_NODE_TOTAL") "1"))
     :parse-fn #(Integer/parseInt %)]
@@ -265,7 +313,8 @@
     :parse-fn #(Integer/parseInt %)]
    ["-m" "--mode MODE" "Mode"
     :default "delete"
-    :validate [#(contains? #{"copy" "delete"} %) "Must be one of copy or delete."]]
+    :validate [#(contains? #{"copy" "delete"} %)
+               (format-invalid-option-arg-message #{"copy" "delete"})]]
    ["-v" nil "Verbosity level"
     :id :verbosity
     :default 0
@@ -286,10 +335,8 @@
         (exit 1 errors))
     (let [[in out] arguments
           test-files# (test-files in)]
-      (->> (if (> (:node-total options) 1)
-             (fetch-artifacts (log 0 (:verbosity options)) options)
-             "")
-           (parse-mocha-output)
+      (->> (when (> (:node-total options) 1)
+             (fetch-artifacts (log 0 (:verbosity options)) options))
            (safe-merge test-files#)
            (partition-into second (:node-total options))
            (tap (log 1 (:verbosity options)))
