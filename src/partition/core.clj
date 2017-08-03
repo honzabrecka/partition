@@ -284,21 +284,21 @@
 (defn cli-options
   []
   [["-h" "--help" "Help"]
-   ["-t" "--token ACCESS_TOKEN" "Access Token"]
-   ["-u" "--user USER" "User"
+   ["-t" "--token ACCESS_TOKEN" "Access token to artifacts."]
+   ["-u" "--user USER" "User. Default to CIRCLE_PROJECT_USERNAME env variable."
     :default (System/getenv "CIRCLE_PROJECT_USERNAME")]
-   ["-p" "--project PROJECT" "Project"
+   ["-p" "--project PROJECT" "Project. Default to CIRCLE_PROJECT_REPONAME env variable."
     :default (System/getenv "CIRCLE_PROJECT_REPONAME")]
    ["-b" "--branch BRANCH" "Branch"
     :default default-branch]
-   ["-c" "--node-total NODE_TOTAL" "Count of nodes (workers)"
+   ["-c" "--node-total NODE_TOTAL" "Count of nodes (workers). Default to CIRCLE_NODE_TOTAL env variable."
     :default (Integer/parseInt (or (System/getenv "CIRCLE_NODE_TOTAL") "1"))
     :parse-fn #(Integer/parseInt %)]
-   ["-i" "--node-index NODE_INDEX" "Index of current node (worker)"
+   ["-i" "--node-index NODE_INDEX" "Index of current node (worker). Default to CIRCLE_NODE_INDEX env variable."
     :default (Integer/parseInt (or (System/getenv "CIRCLE_NODE_INDEX") "0"))
     :parse-fn #(Integer/parseInt %)]
    (let [valid-options #{"copy" "delete"}]
-     ["-m" "--mode MODE" "Mode"
+     ["-m" "--mode MODE" "Mode. Whether delete or copy files."
       :default "delete"
       :validate [#(contains? valid-options %)
                  (str "Must be one of " valid-options)]])
