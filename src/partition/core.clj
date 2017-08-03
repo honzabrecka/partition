@@ -199,15 +199,15 @@
   (is (= artifacts-url-template
          (artifacts-url {})))
   (is (= "https://circleci.com/api/v1/project/abc/xyz/latest/artifacts?branch=master&filter=successful&circle-token=token"
-         (artifacts-url {:user         "abc"
-                         :project      "xyz"
-                         :branch       "master"
-                         :access-token "token"})))
+         (artifacts-url {:user    "abc"
+                         :project "xyz"
+                         :branch  "master"
+                         :token   "token"})))
   (is (= artifacts-url-template
          (artifacts-url {:whatever 2}))))
 
 (defn fetch-artifacts
-  [log {:keys [access-token] :as options}]
+  [log {:keys [token] :as options}]
   (let [{:keys [status body error]} @(http/get (artifacts-url options) {:as :text})]
     (if (ok-response? error status)
       (let [futures (->> (clojure.edn/read-string body)
@@ -217,7 +217,7 @@
                                                                  (some #(when (re-matches (re-pattern (:url-pattern %)) url)
                                                                           %)))]
                                   [parser
-                                   (http/get (str url "?circle-token=" access-token) {:as :text})])))
+                                   (http/get (str url "?circle-token=" token) {:as :text})])))
                          (doall))]
         (->> futures
              (map (fn [[parser future]]
@@ -284,7 +284,7 @@
 (defn cli-options
   []
   [["-h" "--help" "Help"]
-   ["-t" "--access-token ACCESS_TOKEN" "Access Token"]
+   ["-t" "--token ACCESS_TOKEN" "Access Token"]
    ["-u" "--user USER" "User"
     :default (System/getenv "CIRCLE_PROJECT_USERNAME")]
    ["-p" "--project PROJECT" "Project"
@@ -314,8 +314,8 @@
       (:help options)
         (exit 1 summary)
       (and (> (:node-total options) 1)
-           (not (:access-token options)))
-        (exit 1 "Access token (--access-token option) is required when count of nodes (workers) > 1")
+           (not (:token options)))
+        (exit 1 "Access token (--token option) is required when count of nodes (workers) > 1")
       (= (count arguments) 0)
         (exit 1 "Path to tests is missing")
       errors

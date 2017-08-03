@@ -17,7 +17,7 @@ Here comes the partition, which solves this problem almost ideally: Subsets prod
 ## Usage
 
 ```console
-$ java -jar partition.jar --access-token <ACCESS_TOKEN> <PATH_TO_TESTS>
+$ java -jar partition.jar --token <ACCESS_TOKEN> <PATH_TO_TESTS>
 ```
 
 ## Modes
@@ -32,7 +32,7 @@ Mode can be set by `-m` (`--mode`) option.
 ```yml
 dependencies:
   post:
-   - java -jar partition.jar --access-token <ACCESS_TOKEN> test/features:
+   - java -jar partition.jar --token <ACCESS_TOKEN> test/features:
        {parallel: true}
 
 test:
