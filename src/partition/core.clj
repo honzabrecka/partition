@@ -6,8 +6,7 @@
             [clojure.tools.cli :as cli]
             [clojure.xml :as xml]
             [clojure.zip :as zip])
-  (:gen-class)
-  (:use clojure.test))
+  (:gen-class))
 
 (defmacro flip
   [f a b]
@@ -16,32 +15,24 @@
 (defn nil-safe
   [f]
   (fn [a & args]
-    (apply f (cons (or a "") args))))
+    (apply f (or a "") args)))
 
 (def default-branch "master")
 
 (def default-time 10000)
 
-(def artifacts-url-template "https://circleci.com/api/v1/project/%user%/%project%/latest/artifacts?branch=%branch%&filter=successful&circle-token=%access-token%")
+(def artifacts-url-template "https://circleci.com/api/v1/project/%user%/%project%/latest/artifacts?branch=%branch%&filter=successful&circle-token=%token%")
 
 (defn tap
   [f v]
   (f v)
   v)
 
-(deftest tap-test
-  (is (= 1 @(tap #(vswap! % inc) (volatile! 0)))))
-
 (defn log
   [minimal-verbosity-level actual-verbosity-level]
   (fn [message]
     (when (>= actual-verbosity-level minimal-verbosity-level)
       (println message))))
-
-(deftest log-test
-  (with-redefs [println identity]
-    (is (nil? ((log 10 0) "whatever")))
-    (is (= "whatever" ((log 0 10) "whatever")))))
 
 (defn exit
   [status msg]
@@ -56,25 +47,6 @@
                 (cons (conj (first ordered-cubes) val) (rest ordered-cubes))))
             (map vector (take n coll))
             (drop n coll))))
-
-(deftest partition-into-test
-  (testing "partitioning"
-    (are [expected input count]
-      (= expected (partition-into identity count input))
-      [[1]] [1] 1
-      [[7 1]] [7 1] 1
-      [[7] [1]] [7 1] 2
-      [[5 4 2] [8 2]] [4 5 2 8 2] 2
-      [[2 2 1] [3 1 1] [5]] [5 2 3 2 1 1 1] 3))
-  (testing "complex data structure, not just int"
-    (is (= [[[:file 3]
-             [:file 1]]
-            [[:file 2]
-             [:file 2]]]
-           (partition-into second 2 [[:file 1]
-                                     [:file 2]
-                                     [:file 2]
-                                     [:file 3]])))))
 
 (defn zip-str
   [s]
@@ -102,14 +74,6 @@
                                      zip-str
                                      zip/children)))}})
 
-(deftest parsers-xunit-test
-  (is (= {"faq.js" 5000.0}
-         ((get-in parsers ["xunit" :parser])
-           "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites name=\"Mocha Tests\" time=\"5.7\" tests=\"1\" failures=\"0\">\n  <testsuite name=\"Root Suite\" timestamp=\"2017-01-06T19:26:23\" tests=\"0\" failures=\"0\" time=\"0\">\n  </testsuite>\n  <testsuite name=\"FAQ (/cypress/integration/faq.js)\" timestamp=\"2017-01-06T19:26:23\" tests=\"1\" failures=\"0\" time=\"5\">\n    <testcase name=\"FAQ (/cypress/integration/faq.js) cy.should - assert that &lt;title&gt; is Vivus FAQ\" time=\"5.7\" classname=\"cy.should - assert that &lt;title&gt; is Vivus FAQ\">\n    </testcase>\n  </testsuite>\n</testsuites>")))
-  (is (= {"" 5000.0}
-         ((get-in parsers ["xunit" :parser])
-           "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites name=\"Mocha Tests\" time=\"5.7\" tests=\"1\" failures=\"0\">\n  <testsuite name=\"Root Suite\" timestamp=\"2017-01-06T19:26:23\" tests=\"0\" failures=\"0\" time=\"0\">\n  </testsuite>\n  <testsuite name=\"FAQ\" timestamp=\"2017-01-06T19:26:23\" tests=\"1\" failures=\"0\" time=\"5\">\n    <testcase name=\"FAQ cy.should - assert that &lt;title&gt; is Vivus FAQ\" time=\"5.7\" classname=\"cy.should - assert that &lt;title&gt; is Vivus FAQ\">\n    </testcase>\n  </testsuite>\n</testsuites>"))))
-
 (defn test-files
   [dir]
   (into {}
@@ -126,11 +90,6 @@
               acc))
           a b))
 
-(deftest safe-merge-test
-  (is (= {:a 10 :b 0 :c 15}
-         (safe-merge {:a 0 :b 0 :c 0}
-                     {:a 10 :c 15 :x 20}))))
-
 (defn copy-files
   [in out]
   (fn [index cube]
@@ -142,17 +101,6 @@
         (io/copy (io/file source)
                  (io/file target))))))
 
-(deftest copy-files-test
-  (let [calls (volatile! [])]
-    (with-redefs [io/file identity
-                  io/copy (fn [a b] (vswap! calls conj [a b]))
-                  io/make-parents (fn [_])]
-      ((copy-files "foo" "bar") 1 [["a" 10]
-                                   ["b" 10]])
-      (is (= [["foo/a" "bar1/a"]
-              ["foo/b" "bar1/b"]]
-             @calls)))))
-
 (defn delete-files
   [node-index all-files in]
   (fn [index cube]
@@ -163,30 +111,9 @@
         (doseq [file files-to-delete]
           (io/delete-file (str in "/" file) :silently true))))))
 
-(deftest delete-files-test
-  (let [calls (volatile! [])
-        index 0
-        all-files {"a" 10 "b" 10 "c" 10}
-        cube [["b" 10]]
-        in "foo"]
-    (with-redefs [io/delete-file (fn [a _ _] (vswap! calls conj a))]
-      (testing "index does not match node-index -> do nothing"
-        (vreset! calls [])
-        ((delete-files index all-files in) 55 cube)
-        (is (= [] @calls)))
-      (testing "index does match node-index -> delete files not included in cube"
-        (vreset! calls [])
-        ((delete-files index all-files in) 0 cube)
-        (is (= ["foo/a" "foo/c"] @calls))))))
-
 (defn ok-response?
   [error status]
   (and (nil? error) (= status 200)))
-
-(deftest ok-response?-test
-  (is (true? (ok-response? nil 200)))
-  (is (false? (ok-response? "err" 200)))
-  (is (false? (ok-response? nil 500))))
 
 (defn artifacts-url
   [options]
@@ -194,17 +121,6 @@
             (string/replace url (str "%" (name key) "%") (str value)))
           artifacts-url-template
           options))
-
-(deftest artifacts-url-test
-  (is (= artifacts-url-template
-         (artifacts-url {})))
-  (is (= "https://circleci.com/api/v1/project/abc/xyz/latest/artifacts?branch=master&filter=successful&circle-token=token"
-         (artifacts-url {:user    "abc"
-                         :project "xyz"
-                         :branch  "master"
-                         :token   "token"})))
-  (is (= artifacts-url-template
-         (artifacts-url {:whatever 2}))))
 
 (defn fetch-artifacts
   [log {:keys [token] :as options}]
@@ -228,58 +144,6 @@
              (reduce merge {})))
       (do (log (str "Fetch artifacts error: (" status ") " error))
           {}))))
-
-(deftest fetch-artifacts-test
-  (testing "an error"
-    (with-redefs [http/get (fn [_ _] (future (Thread/sleep 10)
-                                             {:error "An error"}))]
-      (is (= {}
-             (fetch-artifacts (fn [_]) {})))))
-  (testing "bad status"
-    (with-redefs [http/get (fn [_ _] (future (Thread/sleep 10)
-                                             {:status 500}))]
-      (is (= {}
-             (fetch-artifacts (fn [_]) {})))))
-  (testing "ok, but no suitable artifact url"
-    (with-redefs [http/get (fn [_ _] (future (Thread/sleep 10)
-                                             {:status 200
-                                              :body   "[{:url \"whatever\"}]"}))]
-      (is (= {}
-             (fetch-artifacts (fn [_]) {})))))
-  (testing "ok, but artifact error"
-    (with-redefs [parsers {"test" {:url-pattern "[a-z]"
-                                   :parser      identity}}
-                  http/get (fn [url _] (future (Thread/sleep 10)
-                                               (condp = url
-                                                 "a?circle-token=" {:error "An error"}
-                                                 {:status 200
-                                                  :body   "({:url \"a\"})"})))]
-      (is (= {}
-             (fetch-artifacts (fn [_]) {})))))
-  (testing "ok, but artifact invalid status"
-    (with-redefs [parsers {"test" {:url-pattern "[a-z]"
-                                   :parser      identity}}
-                  http/get (fn [url _] (future (Thread/sleep 10)
-                                               (condp = url
-                                                 "a?circle-token=" {:status 500}
-                                                 {:status 200
-                                                  :body   "({:url \"a\"})"})))]
-      (is (= {}
-             (fetch-artifacts (fn [_]) {})))))
-  (testing "ok"
-    (with-redefs [parsers {"test" {:url-pattern "[a-z]"
-                                   :parser      (fn [s] {s 10})}}
-                  http/get (fn [url _] (future (Thread/sleep 10)
-                                               (condp = url
-                                                 "a?circle-token=" {:status 200
-                                                                    :body   "foo"}
-                                                 "b?circle-token=" {:status 200
-                                                                    :body   "bar"}
-                                                 {:status 200
-                                                  :body   "({:url \"a\"} {:url \"b\"})"})))]
-      (is (= {"bar" 10
-              "foo" 10}
-             (fetch-artifacts (fn [_]) {:regexp "[a-z]"}))))))
 
 (defn cli-options
   []

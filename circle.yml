@@ -4,6 +4,6 @@ dependencies:
 
 test:
   override:
-    - lein test partition.core
+    - lein test partition.core-test
   post:
     - lein uberjar
