@@ -281,40 +281,27 @@
               "foo" 10}
              (fetch-artifacts (fn [_]) {:regexp "[a-z]"}))))))
 
-(defn getenv
-  [id]
-  (System/getenv id))
-
-(defn format-invalid-option-arg-message
-  [valid]
-  (str "Must be one of #{"
-       (reduce #(str %1 " " %2) valid)
-       "}."))
-
-(deftest format-invalid-option-arg-message-test
-  (is (= "Must be one of #{ab cd}."
-         (format-invalid-option-arg-message #{"ab" "cd"}))))
-
 (defn cli-options
   []
   [["-h" "--help" "Help"]
    ["-t" "--access-token ACCESS_TOKEN" "Access Token"]
    ["-u" "--user USER" "User"
-    :default (getenv "CIRCLE_PROJECT_USERNAME")]
+    :default (System/getenv "CIRCLE_PROJECT_USERNAME")]
    ["-p" "--project PROJECT" "Project"
-    :default (getenv "CIRCLE_PROJECT_REPONAME")]
+    :default (System/getenv "CIRCLE_PROJECT_REPONAME")]
    ["-b" "--branch BRANCH" "Branch"
     :default default-branch]
    ["-c" "--node-total NODE_TOTAL" "Count of nodes (workers)"
-    :default (Integer/parseInt (or (getenv "CIRCLE_NODE_TOTAL") "1"))
+    :default (Integer/parseInt (or (System/getenv "CIRCLE_NODE_TOTAL") "1"))
     :parse-fn #(Integer/parseInt %)]
    ["-i" "--node-index NODE_INDEX" "Index of current node (worker)"
-    :default (Integer/parseInt (or (getenv "CIRCLE_NODE_INDEX") "0"))
+    :default (Integer/parseInt (or (System/getenv "CIRCLE_NODE_INDEX") "0"))
     :parse-fn #(Integer/parseInt %)]
-   ["-m" "--mode MODE" "Mode"
-    :default "delete"
-    :validate [#(contains? #{"copy" "delete"} %)
-               (format-invalid-option-arg-message #{"copy" "delete"})]]
+   (let [valid-options #{"copy" "delete"}]
+     ["-m" "--mode MODE" "Mode"
+      :default "delete"
+      :validate [#(contains? valid-options %)
+                 (str "Must be one of " valid-options)]])
    ["-v" nil "Verbosity level"
     :id :verbosity
     :default 0
